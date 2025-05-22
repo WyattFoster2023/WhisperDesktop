@@ -18,6 +18,7 @@ import queue
 import signal
 import os
 from datetime import datetime
+import wave
 
 class WaveformWidget(pg.PlotWidget):
     def __init__(self, parent=None):
@@ -366,9 +367,29 @@ class TranscriptionGUI(QMainWindow):
         print("[DEBUG] stop_recording: Called")
         audio_data = self.audio_manager.stop_recording()
         print(f"[DEBUG] stop_recording: Got {len(audio_data)} bytes of audio data")
+        
         if audio_data:
+            # Save audio to file
+            # Create recordings directory if it doesn't exist
+            os.makedirs("recordings", exist_ok=True)
+            
+            # Generate filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"recordings/recording_{timestamp}.wav"
+            
+            # Save as WAV file
+            with wave.open(filename, 'wb') as wav_file:
+                wav_file.setnchannels(1)  # Mono
+                wav_file.setsampwidth(2)  # 2 bytes per sample (16-bit)
+                wav_file.setframerate(16000)  # 16kHz
+                wav_file.writeframes(audio_data)
+            
+            print(f"[DEBUG] stop_recording: Saved audio to {filename}")
+            
+            # Put audio data on queue for transcription
             self.audio_queue.put(audio_data)
             print("[DEBUG] stop_recording: Audio data put on queue")
+            
         self.status_label.setText("Ready")
         self.status_label.setStyleSheet("""
             QLabel {
@@ -421,11 +442,27 @@ class TranscriptionGUI(QMainWindow):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
+        async def process_audio_queue():
+            while not self._shutdown:
+                try:
+                    # Get audio data from GUI queue
+                    audio_data = await asyncio.get_event_loop().run_in_executor(
+                        None, self.audio_queue.get
+                    )
+                    if audio_data is None:
+                        break
+                    
+                    print(f"[DEBUG] _run_transcription_loop: Forwarding {len(audio_data)} bytes to transcription manager")
+                    # Forward to transcription manager
+                    await self.transcription_manager.add_audio(audio_data)
+                except Exception as e:
+                    print(f"[ERROR] in process_audio_queue: {e}")
+        
         # Start the transcription manager's processing loop
         loop.run_until_complete(self.transcription_manager.start_processing())
         
-        # Run the worker
-        loop.run_until_complete(self._transcription_worker())
+        # Run the audio queue processor
+        loop.run_until_complete(process_audio_queue())
         loop.close()
 
     async def _transcription_worker(self):

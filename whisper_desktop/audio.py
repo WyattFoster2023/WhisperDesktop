@@ -23,6 +23,18 @@ class AudioManager:
         self.channels = channels
         self.format = format
         self.audio = pyaudio.PyAudio()
+        
+        # List available input devices
+        print("\n=== Available Audio Input Devices ===")
+        default_input = self.audio.get_default_input_device_info()
+        print(f"Default input device: {default_input['name']}")
+        
+        for i in range(self.audio.get_device_count()):
+            dev_info = self.audio.get_device_info_by_index(i)
+            if dev_info['maxInputChannels'] > 0:  # Only show input devices
+                print(f"Device {i}: {dev_info['name']}")
+        print("=====================================\n")
+        
         self.stream: Optional[pyaudio.Stream] = None
         self.recording = False
         self.chunks: List[AudioChunk] = []
@@ -48,15 +60,26 @@ class AudioManager:
                     self.on_chunk_callback(chunk)
             return (in_data, pyaudio.paContinue)
         
-        self.stream = self.audio.open(
-            format=self.format,
-            channels=self.channels,
-            rate=self.sample_rate,
-            input=True,
-            frames_per_buffer=self.chunk_size,
-            stream_callback=callback
-        )
-        self.stream.start_stream()
+        try:
+            # Get default input device info
+            default_input = self.audio.get_default_input_device_info()
+            print(f"[DEBUG] Using input device: {default_input['name']}")
+            
+            self.stream = self.audio.open(
+                format=self.format,
+                channels=self.channels,
+                rate=self.sample_rate,
+                input=True,
+                input_device_index=default_input['index'],  # Use default input device
+                frames_per_buffer=self.chunk_size,
+                stream_callback=callback
+            )
+            self.stream.start_stream()
+            print("[DEBUG] Audio stream started successfully")
+        except Exception as e:
+            print(f"[ERROR] Failed to start audio stream: {e}")
+            self.recording = False
+            raise
     
     def stop_recording(self) -> bytes:
         """Stop recording and return the complete audio data."""

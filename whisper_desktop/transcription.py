@@ -20,12 +20,15 @@ class TranscriptionManager:
         self._is_processing = True
         while self._is_processing:
             try:
+                print("[DEBUG] TranscriptionManager.start_processing: Waiting for audio data...")
                 audio_data = await self._transcription_queue.get()
-                print(f"[DEBUG] TranscriptionManager.start_processing: Got audio_data from queue: {type(audio_data)}")
+                print(f"[DEBUG] TranscriptionManager.start_processing: Got audio_data from queue: {type(audio_data)}, size: {len(audio_data) if audio_data else 'None'}")
                 if audio_data is None:
+                    print("[DEBUG] TranscriptionManager.start_processing: Received None, stopping")
                     break
                     
                 # Process the audio data
+                print("[DEBUG] TranscriptionManager.start_processing: Starting transcription...")
                 result = await asyncio.to_thread(
                     self.model.transcribe,
                     audio_data,
@@ -39,6 +42,7 @@ class TranscriptionManager:
                 
                 # Store in database
                 if self.db_manager:
+                    print("[DEBUG] TranscriptionManager.start_processing: Storing in database")
                     self.db_manager.add_transcription(
                         text=text,
                         duration=result.get("duration", 0.0),
@@ -47,10 +51,13 @@ class TranscriptionManager:
                 
                 # Call the callback if set
                 if self.on_transcription_callback:
+                    print("[DEBUG] TranscriptionManager.start_processing: Calling transcription callback")
                     self.on_transcription_callback(text)
                     
             except Exception as e:
-                print(f"Error processing transcription: {e}")
+                print(f"[ERROR] Error processing transcription: {e}")
+                import traceback
+                traceback.print_exc()
             finally:
                 self._transcription_queue.task_done()
     
