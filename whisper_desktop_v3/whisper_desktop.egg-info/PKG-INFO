@@ -1,0 +1,85 @@
+Metadata-Version: 2.4
+Name: whisper_desktop
+Version: 0.1.0
+Summary: A standalone transcription application using OpenAI's Whisper model
+Home-page: https://github.com/yourusername/whisper_desktop
+Author: Your Name
+Author-email: Your Name <your.email@example.com>
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: PyQt6
+Requires-Dist: pyqtgraph
+Requires-Dist: numpy
+Requires-Dist: pyaudio
+Requires-Dist: openai-whisper
+Requires-Dist: pyautogui
+Dynamic: author
+Dynamic: home-page
+Dynamic: requires-python
+
+# WhisperDesktop
+
+A standalone transcription application using OpenAI's Whisper model with a modern GUI interface.
+
+## Features
+
+- Modern, translucent GUI with real-time waveform visualization
+- Push-to-Talk (PTT) and Toggle recording modes
+- Real-time transcription using OpenAI's Whisper model
+- Automatic typing at cursor position
+- Local SQLite database for transcription history
+- Draggable, always-on-top window
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/whisper_desktop.git
+cd whisper_desktop
+```
+
+2. Install the package:
+```bash
+pip install -e .
+```
+
+## Usage
+
+Run the application:
+```bash
+whisper-desktop
+```
+
+### Recording Modes
+
+1. **Push-to-Talk (PTT) Mode**
+   - Hold the "Hold to Record" button while speaking
+   - Release to stop recording and transcribe
+
+2. **Toggle Mode**
+   - Click "Start Recording" to begin
+   - Click again to stop and transcribe
+
+### Features
+
+- The window can be dragged by clicking and holding anywhere
+- The waveform shows real-time audio levels
+- Transcriptions are automatically typed at the cursor position
+- Previous transcriptions are stored in a local SQLite database
+
+## Requirements
+
+- Python 3.8 or higher
+- PyQt6
+- pyqtgraph
+- numpy
+- pyaudio
+- openai-whisper
+- pyautogui
+
+## License
+
+MIT License 
