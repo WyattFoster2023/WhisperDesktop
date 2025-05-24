@@ -1,5 +1,6 @@
 import asyncio
 import whisper
+import numpy as np
 from typing import Optional, Callable
 from .database import DatabaseManager
 
@@ -15,6 +16,14 @@ class TranscriptionManager:
         self._is_processing = False
         self._last_transcription = None
     
+    def _bytes_to_numpy(self, audio_data: bytes) -> np.ndarray:
+        """Convert audio bytes to numpy array."""
+        # Convert bytes to numpy array of int16
+        audio_array = np.frombuffer(audio_data, dtype=np.int16)
+        # Convert to float32 and normalize to [-1, 1]
+        audio_float = audio_array.astype(np.float32) / 32768.0
+        return audio_float
+    
     async def start_processing(self):
         print("[DEBUG] TranscriptionManager.start_processing: Started")
         self._is_processing = True
@@ -27,11 +36,15 @@ class TranscriptionManager:
                     print("[DEBUG] TranscriptionManager.start_processing: Received None, stopping")
                     break
                     
+                # Convert audio data to numpy array
+                audio_array = self._bytes_to_numpy(audio_data)
+                print(f"[DEBUG] TranscriptionManager.start_processing: Converted audio data to numpy array of shape {audio_array.shape}")
+                
                 # Process the audio data
                 print("[DEBUG] TranscriptionManager.start_processing: Starting transcription...")
                 result = await asyncio.to_thread(
                     self.model.transcribe,
-                    audio_data,
+                    audio_array,
                     language="en"
                 )
                 
