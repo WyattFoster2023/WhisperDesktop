@@ -4,8 +4,8 @@ import numpy as np
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QLabel, QPushButton, QComboBox, QCheckBox, QLineEdit,
                             QHBoxLayout, QGroupBox, QTextEdit)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
-from PyQt6.QtGui import QPainter, QColor, QPen, QPainterPath, QKeySequence
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject, QThread
+from PyQt6.QtGui import QPainter, QColor, QPen, QPainterPath, QKeySequence, QShortcut
 import pyqtgraph as pg
 import pyautogui
 import pyperclip
@@ -19,6 +19,28 @@ import signal
 import os
 from datetime import datetime
 import wave
+from .settings import SettingsManager
+
+class AsyncWorker(QThread):
+    finished = pyqtSignal(object)
+    error = pyqtSignal(Exception)
+    
+    def __init__(self, coro):
+        super().__init__()
+        self.coro = coro
+        self.loop = None
+    
+    def run(self):
+        try:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+            result = self.loop.run_until_complete(self.coro)
+            self.finished.emit(result)
+        except Exception as e:
+            self.error.emit(e)
+        finally:
+            if self.loop:
+                self.loop.close()
 
 class WaveformWidget(pg.PlotWidget):
     def __init__(self, parent=None):
@@ -137,21 +159,7 @@ class TranscriptionGUI(QMainWindow):
         # Initialize managers
         self.audio_manager = AudioManager()
         self.db_manager = DatabaseManager()
-        self.transcription_manager = TranscriptionManager(db_manager=self.db_manager)
-        
-        # Set up callbacks
-        self.audio_manager.on_chunk_callback = self._on_audio_chunk
-        self.transcription_manager.on_transcription_callback = self._on_transcription
-        
-        # Create a thread-safe queue for audio data
-        self.audio_queue = queue.Queue()
-        
-        # Start transcription processing in a background thread
-        print("[DEBUG] Before starting transcription thread")
-        self.transcription_thread = threading.Thread(target=self._run_transcription_loop, daemon=True)
-        self.transcription_thread.start()
-        print("[DEBUG] After starting transcription thread")
-        print("[DEBUG] Transcription thread started")
+        self.settings_manager = SettingsManager()
         
         # Create central widget with rounded corners
         self.central_widget = QWidget()
@@ -179,125 +187,12 @@ class TranscriptionGUI(QMainWindow):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
         
-        # Status indicators layout
-        status_layout = QHBoxLayout()
+        # Initialize UI components
+        self.init_ui()
         
-        # Model status
-        model_status_layout = QHBoxLayout()
-        model_status_layout.addWidget(QLabel("Model:"))
-        self.model_status = StatusIndicator()
-        model_status_layout.addWidget(self.model_status)
-        model_status_layout.addStretch()
-        status_layout.addLayout(model_status_layout)
-        
-        # Transcription status
-        trans_status_layout = QHBoxLayout()
-        trans_status_layout.addWidget(QLabel("Transcribing:"))
-        self.trans_status = StatusIndicator()
-        trans_status_layout.addWidget(self.trans_status)
-        trans_status_layout.addStretch()
-        status_layout.addLayout(trans_status_layout)
-        
-        layout.addLayout(status_layout)
-        
-        # Status label
-        self.status_label = QLabel("Ready")
-        self.status_label.setStyleSheet("""
-            QLabel {
-                color: #424242;
-                font-size: 16px;
-                font-weight: bold;
-            }
-        """)
-        layout.addWidget(self.status_label)
-        
-        # Waveform display
-        self.waveform = WaveformWidget()
-        layout.addWidget(self.waveform)
-        
-        # Output options group
-        output_group = QGroupBox("Output Options")
-        output_layout = QVBoxLayout()
-        
-        # Clipboard option
-        self.clipboard_checkbox = QCheckBox("Copy to Clipboard")
-        self.clipboard_checkbox.setChecked(True)
-        output_layout.addWidget(self.clipboard_checkbox)
-        
-        # Auto-type option
-        self.autotype_checkbox = QCheckBox("Auto-type at Cursor")
-        self.autotype_checkbox.setChecked(True)
-        output_layout.addWidget(self.autotype_checkbox)
-        
-        output_group.setLayout(output_layout)
-        layout.addWidget(output_group)
-        
-        # Hotkeys group
-        hotkeys_group = QGroupBox("Hotkeys")
-        hotkeys_layout = QVBoxLayout()
-        
-        # PTT hotkey
-        ptt_layout = QHBoxLayout()
-        ptt_layout.addWidget(QLabel("PTT Hotkey:"))
-        self.ptt_hotkey = HotkeyLineEdit()
-        ptt_layout.addWidget(self.ptt_hotkey)
-        hotkeys_layout.addLayout(ptt_layout)
-        
-        # Toggle hotkey
-        toggle_layout = QHBoxLayout()
-        toggle_layout.addWidget(QLabel("Toggle Hotkey:"))
-        self.toggle_hotkey = HotkeyLineEdit()
-        toggle_layout.addWidget(self.toggle_hotkey)
-        hotkeys_layout.addLayout(toggle_layout)
-        
-        hotkeys_group.setLayout(hotkeys_layout)
-        layout.addWidget(hotkeys_group)
-        
-        # Mode selector
-        self.mode_selector = QComboBox()
-        self.mode_selector.addItems(["PTT", "Toggle"])
-        self.mode_selector.setStyleSheet("""
-            QComboBox {
-                background-color: white;
-                border: 2px solid #2196F3;
-                border-radius: 10px;
-                padding: 5px 10px;
-                font-size: 14px;
-            }
-            QComboBox::drop-down {
-                border: none;
-            }
-            QComboBox::down-arrow {
-                image: none;
-            }
-        """)
-        layout.addWidget(self.mode_selector)
-        
-        # PTT mode button
-        self.ptt_button = ModernButton("Hold to Record (PTT Mode)")
-        self.ptt_button.pressed.connect(self.start_recording)
-        self.ptt_button.released.connect(self.stop_recording)
-        layout.addWidget(self.ptt_button)
-        
-        # Toggle mode button
-        self.toggle_button = ModernButton("Start Recording (Toggle Mode)")
-        self.toggle_button.clicked.connect(self.toggle_recording)
-        layout.addWidget(self.toggle_button)
-        
-        # Add transcription log
-        self.transcription_log = QTextEdit()
-        self.transcription_log.setReadOnly(True)
-        self.transcription_log.setStyleSheet("""
-            QTextEdit {
-                background-color: white;
-                border: 2px solid #2196F3;
-                border-radius: 10px;
-                padding: 5px;
-                font-size: 14px;
-            }
-        """)
-        self.transcription_log.setMaximumHeight(100)
-        layout.addWidget(self.transcription_log)
+        # Initialize audio and transcription after UI
+        self.init_audio()
+        self.init_transcription()
         
         # Set up update timer
         self.timer = QTimer()
@@ -305,24 +200,192 @@ class TranscriptionGUI(QMainWindow):
         self.timer.start(50)  # Update every 50ms
         
         # Set window size and position
-        self.setFixedSize(400, 500)  # Increased height for new controls
+        self.setFixedSize(400, 500)
         self.move(100, 100)
         
         # For dragging the window
         self.oldPos = None
         
-        # Set up hotkey handlers
-        self.ptt_hotkey.textChanged.connect(self._update_ptt_hotkey)
-        self.toggle_hotkey.textChanged.connect(self._update_toggle_hotkey)
-        
-        # Initialize hotkeys
-        self.ptt_hotkey.setText("Ctrl+Shift+R")  # Default PTT hotkey
-        self.toggle_hotkey.setText("Ctrl+Shift+T")  # Default toggle hotkey
-        
         # Set up signal handlers for graceful shutdown
         if os.name != 'nt':  # Not Windows
             signal.signal(signal.SIGINT, self._signal_handler)
             signal.signal(signal.SIGTERM, self._signal_handler)
+    
+    def init_ui(self):
+        # Settings group
+        settings_group = QGroupBox("Settings")
+        settings_layout = QVBoxLayout()
+        
+        # Model settings
+        model_layout = QHBoxLayout()
+        model_layout.addWidget(QLabel("Model:"))
+        self.model_combo = QComboBox()
+        self.model_combo.addItems(["tiny", "base", "small", "medium", "large-v3"])
+        self.model_combo.setCurrentText(self.settings_manager.settings.model_name)
+        model_layout.addWidget(self.model_combo)
+        
+        device_layout = QHBoxLayout()
+        device_layout.addWidget(QLabel("Device:"))
+        self.device_combo = QComboBox()
+        self.device_combo.addItems(["cpu", "cuda"])
+        self.device_combo.setCurrentText(self.settings_manager.settings.device)
+        device_layout.addWidget(self.device_combo)
+        
+        compute_layout = QHBoxLayout()
+        compute_layout.addWidget(QLabel("Compute Type:"))
+        self.compute_combo = QComboBox()
+        self.compute_combo.addItems(["int8", "float16"])
+        self.compute_combo.setCurrentText(self.settings_manager.settings.compute_type)
+        compute_layout.addWidget(self.compute_combo)
+        
+        settings_layout.addLayout(model_layout)
+        settings_layout.addLayout(device_layout)
+        settings_layout.addLayout(compute_layout)
+        
+        # Shortcut settings
+        shortcut_layout = QHBoxLayout()
+        shortcut_layout.addWidget(QLabel("Start Recording:"))
+        self.start_shortcut = QLineEdit(self.settings_manager.settings.start_recording_shortcut)
+        shortcut_layout.addWidget(self.start_shortcut)
+        
+        shortcut_layout2 = QHBoxLayout()
+        shortcut_layout2.addWidget(QLabel("Stop Recording:"))
+        self.stop_shortcut = QLineEdit(self.settings_manager.settings.stop_recording_shortcut)
+        shortcut_layout2.addWidget(self.stop_shortcut)
+        
+        settings_layout.addLayout(shortcut_layout)
+        settings_layout.addLayout(shortcut_layout2)
+        
+        # Save settings button
+        save_settings_btn = QPushButton("Save Settings")
+        save_settings_btn.clicked.connect(self.save_settings)
+        settings_layout.addWidget(save_settings_btn)
+        
+        settings_group.setLayout(settings_layout)
+        self.central_widget.layout().addWidget(settings_group)
+        
+        # Waveform display
+        self.waveform = WaveformWidget()
+        self.central_widget.layout().addWidget(self.waveform)
+        
+        # Recording controls
+        self.record_button = QPushButton("Start Recording (Ctrl+Shift+R)")
+        self.record_button.clicked.connect(self.toggle_recording)
+        self.central_widget.layout().addWidget(self.record_button)
+        
+        # Transcription output
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+        self.central_widget.layout().addWidget(self.output)
+        
+        # Set up shortcuts
+        self.update_shortcuts()
+    
+    def update_shortcuts(self):
+        # Remove existing shortcuts
+        for shortcut in self.findChildren(QShortcut):
+            shortcut.deleteLater()
+        
+        # Add new shortcuts
+        start_shortcut = QShortcut(QKeySequence(self.settings_manager.settings.start_recording_shortcut), self)
+        start_shortcut.activated.connect(self.start_recording)
+        
+        stop_shortcut = QShortcut(QKeySequence(self.settings_manager.settings.stop_recording_shortcut), self)
+        stop_shortcut.activated.connect(self.stop_recording)
+        
+        # Update button text
+        self.record_button.setText(f"Start Recording ({self.settings_manager.settings.start_recording_shortcut})")
+    
+    def save_settings(self):
+        self.settings_manager.update_settings(
+            model_name=self.model_combo.currentText(),
+            device=self.device_combo.currentText(),
+            compute_type=self.compute_combo.currentText(),
+            start_recording_shortcut=self.start_shortcut.text(),
+            stop_recording_shortcut=self.stop_shortcut.text()
+        )
+        self.update_shortcuts()
+        
+        # Reinitialize transcription manager with new settings
+        self.init_transcription()
+    
+    def init_audio(self):
+        self.audio_manager = AudioManager()
+        self.audio_manager.on_chunk_callback = self.on_audio_chunk
+    
+    def init_transcription(self):
+        try:
+            self.transcription_manager = TranscriptionManager(
+                model_name=self.settings_manager.settings.model_name,
+                device=self.settings_manager.settings.device,
+                compute_type=self.settings_manager.settings.compute_type
+            )
+            self.transcription_manager.on_transcription_callback = self.on_transcription
+            
+            # Start transcription processing in a separate thread
+            self.transcription_worker = AsyncWorker(self.transcription_manager.start_processing())
+            self.transcription_worker.error.connect(self.handle_transcription_error)
+            self.transcription_worker.start()
+            
+        except Exception as e:
+            print(f"Error initializing transcription: {e}")
+            self.output.append(f"Error: Failed to initialize transcription: {e}")
+    
+    def handle_transcription_error(self, error):
+        print(f"Transcription error: {error}")
+        self.output.append(f"Error: {error}")
+    
+    def toggle_recording(self):
+        if self.audio_manager.recording:
+            self.stop_recording()
+        else:
+            self.start_recording()
+    
+    def start_recording(self):
+        if not self.audio_manager.recording:
+            try:
+                self.audio_manager.start_recording()
+                self.record_button.setText(f"Stop Recording ({self.settings_manager.settings.stop_recording_shortcut})")
+            except Exception as e:
+                print(f"Error starting recording: {e}")
+                self.output.append(f"Error: Failed to start recording: {e}")
+    
+    def stop_recording(self):
+        if self.audio_manager.recording:
+            try:
+                audio_data = self.audio_manager.stop_recording()
+                self.record_button.setText(f"Start Recording ({self.settings_manager.settings.start_recording_shortcut})")
+                if audio_data:
+                    # Create a new worker for processing the audio
+                    worker = AsyncWorker(self.transcription_manager.add_audio(audio_data))
+                    worker.error.connect(self.handle_transcription_error)
+                    worker.start()
+            except Exception as e:
+                print(f"Error stopping recording: {e}")
+                self.output.append(f"Error: Failed to stop recording: {e}")
+    
+    def on_audio_chunk(self, chunk):
+        try:
+            audio_level = self.audio_manager.get_audio_level(chunk.data)
+            # Use QTimer.singleShot to ensure UI updates happen in the main thread
+            QTimer.singleShot(0, lambda: self.waveform.update(audio_level))
+        except Exception as e:
+            print(f"Error updating waveform: {e}")
+    
+    def on_transcription(self, text):
+        # Use QTimer.singleShot to ensure UI updates happen in the main thread
+        QTimer.singleShot(0, lambda: self.output.append(text))
+    
+    def update_waveform(self):
+        if hasattr(self, 'waveform'):
+            try:
+                if self.audio_manager.recording and self.audio_manager.chunks:
+                    audio_level = self.audio_manager.get_audio_level(self.audio_manager.chunks[-1].data)
+                    self.waveform.update(audio_level)
+                else:
+                    self.waveform.update(0.0)
+            except Exception as e:
+                print(f"Error updating waveform: {e}")
     
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -337,185 +400,37 @@ class TranscriptionGUI(QMainWindow):
     def mouseReleaseEvent(self, event):
         self.oldPos = None
     
-    def _on_audio_chunk(self, chunk):
-        # Use chunk.data and chunk.timestamp for debug and waveform
-        try:
-            print(f"[DEBUG] _on_audio_chunk: Received chunk with {len(chunk.data)} bytes at {getattr(chunk, 'timestamp', 'N/A')}")
-            audio_level = self.audio_manager.get_audio_level(chunk.data)
-            self.waveform.update(audio_level)
-        except Exception as e:
-            print(f"[ERROR] in _on_audio_chunk: {e}")
-    
-    def _on_transcription(self, text: str):
-        """Handle completed transcription."""
-        self.trans_status.set_status(False)
-        if self.clipboard_checkbox.isChecked():
-            pyperclip.copy(text)
-        if self.autotype_checkbox.isChecked():
-            pyautogui.write(text)
-        self.status_label.setText("Transcription complete")
-        self.transcription_log.append(text)
-    
-    def start_recording(self):
-        """Start recording in PTT mode."""
-        self.audio_manager.start_recording()
-        self.status_label.setText("Recording...")
-        self.status_label.setStyleSheet("""
-            QLabel {
-                color: #F44336;
-                font-size: 16px;
-                font-weight: bold;
-            }
-        """)
-    
-    def stop_recording(self):
-        print("[DEBUG] stop_recording: Called")
-        audio_data = self.audio_manager.stop_recording()
-        print(f"[DEBUG] stop_recording: Got {len(audio_data)} bytes of audio data")
-        
-        if audio_data:
-            # Save audio to file
-            # Create recordings directory if it doesn't exist
-            os.makedirs("recordings", exist_ok=True)
-            
-            # Generate filename with timestamp
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"recordings/recording_{timestamp}.wav"
-            
-            # Save as WAV file
-            with wave.open(filename, 'wb') as wav_file:
-                wav_file.setnchannels(1)  # Mono
-                wav_file.setsampwidth(2)  # 2 bytes per sample (16-bit)
-                wav_file.setframerate(16000)  # 16kHz
-                wav_file.writeframes(audio_data)
-            
-            print(f"[DEBUG] stop_recording: Saved audio to {filename}")
-            
-            # Put audio data on queue for transcription
-            self.audio_queue.put(audio_data)
-            print("[DEBUG] stop_recording: Audio data put on queue")
-            
-        self.status_label.setText("Ready")
-        self.status_label.setStyleSheet("""
-            QLabel {
-                color: #424242;
-                font-size: 16px;
-                font-weight: bold;
-            }
-        """)
-    
-    def toggle_recording(self):
-        """Toggle recording state."""
-        if self.audio_manager.recording:
-            self.stop_recording()
-        else:
-            self.start_recording()
-    
     def closeEvent(self, event):
         """Clean up when closing the window."""
         print("Cleaning up resources...")
         self._shutdown = True
         
-        # Remove hotkeys
-        if self.ptt_hotkey.hotkey:
-            try:
-                keyboard.remove_hotkey(self.ptt_hotkey.hotkey)
-            except:
-                pass
-        if self.toggle_hotkey.hotkey:
-            try:
-                keyboard.remove_hotkey(self.toggle_hotkey.hotkey)
-            except:
-                pass
+        # Stop the async timer
+        if hasattr(self, 'async_timer'):
+            self.async_timer.stop()
         
-        self.audio_queue.put(None)  # Signal the background thread to exit
-        self.audio_manager.cleanup()
+        # Clean up audio resources
+        try:
+            self.audio_manager.cleanup()
+        except Exception as e:
+            print(f"Error cleaning up audio: {e}")
+        
+        # Clean up transcription worker
+        if hasattr(self, 'transcription_worker'):
+            try:
+                # Stop the transcription processing
+                asyncio.run(self.transcription_manager.stop_processing())
+                # Wait for the worker to finish
+                self.transcription_worker.quit()
+                self.transcription_worker.wait(1000)  # Wait up to 1 second
+                if self.transcription_worker.isRunning():
+                    print("Warning: Transcription worker did not stop gracefully")
+                    self.transcription_worker.terminate()  # Force stop if needed
+            except Exception as e:
+                print(f"Error cleaning up transcription worker: {e}")
+        
         event.accept()
-
-    def update_waveform(self):
-        # If recording, update the waveform with the last chunk's audio level
-        if self.audio_manager.recording and self.audio_manager.chunks:
-            audio_level = self.audio_manager.get_audio_level(self.audio_manager.chunks[-1].data)
-            self.waveform.update(audio_level)
-        else:
-            # Slowly decay the waveform to zero when not recording
-            self.waveform.update(0.0)
-
-    def _run_transcription_loop(self):
-        print("[DEBUG] Entered _run_transcription_loop thread")
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        async def process_audio_queue():
-            print("\n=== DEBUG MODE: Starting Transcription Loop ===\n")
-            while not self._shutdown:
-                try:
-                    print("[DEBUG] Waiting for audio data from queue...")
-                    # Get audio data from GUI queue
-                    audio_data = await asyncio.get_event_loop().run_in_executor(
-                        None, self.audio_queue.get
-                    )
-                    if audio_data is None:
-                        print("[DEBUG] Received None from queue, breaking loop")
-                        break
-                    
-                    print(f"[DEBUG] _run_transcription_loop: Got audio data from queue: {len(audio_data)} bytes")
-                    # Forward to transcription manager
-                    await self.transcription_manager.add_audio(audio_data)
-                    print("[DEBUG] Audio data forwarded to transcription manager")
-                except Exception as e:
-                    print(f"[ERROR] in process_audio_queue: {e}")
-                    import traceback
-                    traceback.print_exc()
-        
-        async def run_all():
-            print("[DEBUG] Starting transcription manager and audio queue processor")
-            # Run both the transcription manager and audio queue processor concurrently
-            await asyncio.gather(
-                self.transcription_manager.start_processing(),
-                process_audio_queue()
-            )
-        
-        try:
-            # Run both coroutines concurrently
-            loop.run_until_complete(run_all())
-        except Exception as e:
-            print(f"[ERROR] in run_all: {e}")
-            import traceback
-            traceback.print_exc()
-        finally:
-            loop.close()
-
-    async def _transcription_worker(self):
-        """Worker function for transcription processing."""
-        try:
-            self.model_status.set_status(False)  # Model is loading
-            await self.transcription_manager.start_processing()
-            self.model_status.set_status(True)  # Model is ready
-        except Exception as e:
-            print(f"Error in transcription worker: {e}")
-            self.model_status.set_status(False)
-
-    def _update_ptt_hotkey(self, hotkey):
-        """Update the PTT hotkey."""
-        if self.ptt_hotkey.hotkey:
-            try:
-                keyboard.remove_hotkey(self.ptt_hotkey.hotkey)
-            except:
-                pass
-            keyboard.add_hotkey(self.ptt_hotkey.hotkey, self.start_recording, trigger_on_release=False)
-            keyboard.add_hotkey(self.ptt_hotkey.hotkey, self.stop_recording, trigger_on_release=True)
     
-    def _update_toggle_hotkey(self, hotkey):
-        """Update the toggle hotkey."""
-        if self.toggle_hotkey.hotkey:
-            try:
-                keyboard.remove_hotkey(self.toggle_hotkey.hotkey)
-            except:
-                pass
-            keyboard.add_hotkey(self.toggle_hotkey.hotkey, self.toggle_recording)
-
     def _signal_handler(self, signum, frame):
         """Handle system signals for graceful shutdown."""
         print("\nShutting down gracefully...")

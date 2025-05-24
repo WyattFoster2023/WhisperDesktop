@@ -22,28 +22,45 @@ class AudioManager:
         self.chunk_size = chunk_size
         self.channels = channels
         self.format = format
-        self.audio = pyaudio.PyAudio()
-        
-        # List available input devices
-        print("\n=== Available Audio Input Devices ===")
-        default_input = self.audio.get_default_input_device_info()
-        print(f"Default input device: {default_input['name']}")
-        
-        for i in range(self.audio.get_device_count()):
-            dev_info = self.audio.get_device_info_by_index(i)
-            if dev_info['maxInputChannels'] > 0:  # Only show input devices
-                print(f"Device {i}: {dev_info['name']}")
-        print("=====================================\n")
-        
-        self.stream: Optional[pyaudio.Stream] = None
+        self.audio = None
+        self.stream = None
         self.recording = False
         self.chunks: List[AudioChunk] = []
         self.on_chunk_callback: Optional[Callable[[AudioChunk], None]] = None
-        
+        self._initialize_audio()
+    
+    def _initialize_audio(self):
+        """Initialize PyAudio and list available devices."""
+        try:
+            self.audio = pyaudio.PyAudio()
+            
+            # List available input devices
+            print("\n=== Available Audio Input Devices ===")
+            try:
+                default_input = self.audio.get_default_input_device_info()
+                print(f"Default input device: {default_input['name']}")
+            except Exception as e:
+                print(f"Warning: Could not get default input device: {e}")
+            
+            for i in range(self.audio.get_device_count()):
+                try:
+                    dev_info = self.audio.get_device_info_by_index(i)
+                    if dev_info['maxInputChannels'] > 0:  # Only show input devices
+                        print(f"Device {i}: {dev_info['name']}")
+                except Exception as e:
+                    print(f"Warning: Could not get info for device {i}: {e}")
+            print("=====================================\n")
+        except Exception as e:
+            print(f"Error initializing audio: {e}")
+            raise
+    
     def start_recording(self):
         """Start recording audio."""
         if self.recording:
             return
+            
+        if not self.audio:
+            self._initialize_audio()
             
         self.recording = True
         self.chunks = []
@@ -79,6 +96,7 @@ class AudioManager:
         except Exception as e:
             print(f"[ERROR] Failed to start audio stream: {e}")
             self.recording = False
+            self.cleanup()  # Clean up on error
             raise
     
     def stop_recording(self) -> bytes:
@@ -88,9 +106,13 @@ class AudioManager:
             
         self.recording = False
         if self.stream:
-            self.stream.stop_stream()
-            self.stream.close()
-            self.stream = None
+            try:
+                self.stream.stop_stream()
+                self.stream.close()
+            except Exception as e:
+                print(f"Warning: Error stopping stream: {e}")
+            finally:
+                self.stream = None
         
         # Combine all chunks
         audio_data = b''.join(chunk.data for chunk in self.chunks)
@@ -104,20 +126,45 @@ class AudioManager:
     
     def save_to_wav(self, audio_data: bytes, filename: str):
         """Save audio data to a WAV file."""
-        with wave.open(filename, 'wb') as wf:
-            wf.setnchannels(self.channels)
-            wf.setsampwidth(self.audio.get_sample_size(self.format))
-            wf.setframerate(self.sample_rate)
-            wf.writeframes(audio_data)
+        try:
+            with wave.open(filename, 'wb') as wf:
+                wf.setnchannels(self.channels)
+                wf.setsampwidth(self.audio.get_sample_size(self.format))
+                wf.setframerate(self.sample_rate)
+                wf.writeframes(audio_data)
+        except Exception as e:
+            print(f"Error saving WAV file: {e}")
+            raise
     
     def cleanup(self):
         """Clean up audio resources."""
         if self.stream:
-            self.stream.stop_stream()
-            self.stream.close()
-        self.audio.terminate()
+            try:
+                if self.stream.is_active():
+                    self.stream.stop_stream()
+                self.stream.close()
+            except Exception as e:
+                print(f"Warning: Error closing stream: {e}")
+            finally:
+                self.stream = None
+        
+        if self.audio:
+            try:
+                self.audio.terminate()
+            except Exception as e:
+                print(f"Warning: Error terminating PyAudio: {e}")
+            finally:
+                self.audio = None
     
     def get_audio_level(self, chunk: bytes) -> float:
         """Calculate the audio level from a chunk of audio data."""
-        audio_data = np.frombuffer(chunk, dtype=np.int16)
-        return float(np.abs(audio_data).mean()) / 32768.0 
+        try:
+            audio_data = np.frombuffer(chunk, dtype=np.int16)
+            return float(np.abs(audio_data).mean()) / 32768.0
+        except Exception as e:
+            print(f"Warning: Error calculating audio level: {e}")
+            return 0.0
+    
+    def __del__(self):
+        """Ensure cleanup on object destruction."""
+        self.cleanup() 
