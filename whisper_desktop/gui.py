@@ -20,6 +20,16 @@ import os
 from datetime import datetime
 import wave
 from .settings import SettingsManager
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='[%(levelname)s] %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 class AsyncWorker(QThread):
     finished = pyqtSignal(object)
@@ -29,17 +39,22 @@ class AsyncWorker(QThread):
         super().__init__()
         self.coro = coro
         self.loop = None
+        print(f"[DEBUG] AsyncWorker initialized with coroutine: {coro.__name__ if hasattr(coro, '__name__') else type(coro)}")
     
     def run(self):
         try:
+            print("[DEBUG] AsyncWorker starting execution")
             self.loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self.loop)
             result = self.loop.run_until_complete(self.coro)
+            print("[DEBUG] AsyncWorker completed successfully")
             self.finished.emit(result)
         except Exception as e:
+            print(f"[ERROR] AsyncWorker failed: {e}")
             self.error.emit(e)
         finally:
             if self.loop:
+                print("[DEBUG] AsyncWorker cleaning up event loop")
                 self.loop.close()
 
 class WaveformWidget(pg.PlotWidget):
@@ -148,19 +163,15 @@ class TranscriptionGUI(QMainWindow):
     def __init__(self):
         print("\n=== DEBUG MODE: TranscriptionGUI Initialized ===\n")
         super().__init__()
-        
         # Add shutdown flag first
         self._shutdown = False
-        
         self.setWindowTitle("WhisperDesktop")
         self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        
         # Initialize managers
         self.audio_manager = AudioManager()
         self.db_manager = DatabaseManager()
         self.settings_manager = SettingsManager()
-        
         # Create central widget with rounded corners
         self.central_widget = QWidget()
         self.central_widget.setStyleSheet("""
@@ -181,12 +192,13 @@ class TranscriptionGUI(QMainWindow):
             }
         """)
         self.setCentralWidget(self.central_widget)
-        
         # Create layout
         layout = QVBoxLayout(self.central_widget)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
-        
+        # Initialize status indicators before init_ui
+        self.model_status = StatusIndicator()
+        self.trans_status = StatusIndicator()
         # Initialize UI components
         self.init_ui()
         
@@ -278,6 +290,14 @@ class TranscriptionGUI(QMainWindow):
         self.output.setReadOnly(True)
         self.central_widget.layout().addWidget(self.output)
         
+        # Add status indicators to the UI for test compatibility
+        status_layout = QHBoxLayout()
+        status_layout.addWidget(QLabel("Model Status:"))
+        status_layout.addWidget(self.model_status)
+        status_layout.addWidget(QLabel("Transcription Status:"))
+        status_layout.addWidget(self.trans_status)
+        self.central_widget.layout().addLayout(status_layout)
+        
         # Set up shortcuts
         self.update_shortcuts()
     
@@ -297,15 +317,21 @@ class TranscriptionGUI(QMainWindow):
         self.record_button.setText(f"Start Recording ({self.settings_manager.settings.start_recording_shortcut})")
     
     def save_settings(self):
+        # If CPU and float16, force int8
+        device = self.device_combo.currentText()
+        compute_type = self.compute_combo.currentText()
+        if device == "cpu" and compute_type == "float16":
+            compute_type = "int8"
+            self.output.append("[Warning] float16 is not supported on CPU. Using int8 instead.")
+            self.compute_combo.setCurrentText("int8")
         self.settings_manager.update_settings(
             model_name=self.model_combo.currentText(),
-            device=self.device_combo.currentText(),
-            compute_type=self.compute_combo.currentText(),
+            device=device,
+            compute_type=compute_type,
             start_recording_shortcut=self.start_shortcut.text(),
             stop_recording_shortcut=self.stop_shortcut.text()
         )
         self.update_shortcuts()
-        
         # Reinitialize transcription manager with new settings
         self.init_transcription()
     
@@ -315,20 +341,29 @@ class TranscriptionGUI(QMainWindow):
     
     def init_transcription(self):
         try:
+            print("[DEBUG] Initializing transcription manager")
+            device = self.settings_manager.settings.device
+            compute_type = self.settings_manager.settings.compute_type
+            if device == "cpu" and compute_type == "float16":
+                compute_type = "int8"
+                self.output.append("[Warning] float16 is not supported on CPU. Using int8 instead.")
+                self.settings_manager.update_settings(compute_type="int8")
             self.transcription_manager = TranscriptionManager(
                 model_name=self.settings_manager.settings.model_name,
-                device=self.settings_manager.settings.device,
-                compute_type=self.settings_manager.settings.compute_type
+                device=device,
+                compute_type=compute_type
             )
+            print("[DEBUG] Transcription manager initialized")
             self.transcription_manager.on_transcription_callback = self.on_transcription
-            
             # Start transcription processing in a separate thread
+            print("[DEBUG] Creating transcription worker")
             self.transcription_worker = AsyncWorker(self.transcription_manager.start_processing())
             self.transcription_worker.error.connect(self.handle_transcription_error)
+            print("[DEBUG] Starting transcription worker")
             self.transcription_worker.start()
-            
+            print("[DEBUG] Transcription worker started")
         except Exception as e:
-            print(f"Error initializing transcription: {e}")
+            print(f"[ERROR] Failed to initialize transcription: {e}")
             self.output.append(f"Error: Failed to initialize transcription: {e}")
     
     def handle_transcription_error(self, error):
@@ -356,13 +391,20 @@ class TranscriptionGUI(QMainWindow):
                 audio_data = self.audio_manager.stop_recording()
                 self.record_button.setText(f"Start Recording ({self.settings_manager.settings.start_recording_shortcut})")
                 if audio_data:
-                    # Create a new worker for processing the audio
-                    worker = AsyncWorker(self.transcription_manager.add_audio(audio_data))
-                    worker.error.connect(self.handle_transcription_error)
-                    worker.start()
+                    # Store worker as instance variable to prevent garbage collection
+                    self.audio_worker = AsyncWorker(self.transcription_manager.add_audio(audio_data))
+                    self.audio_worker.error.connect(self.handle_transcription_error)
+                    self.audio_worker.finished.connect(self._on_audio_worker_finished)
+                    self.audio_worker.start()
             except Exception as e:
                 print(f"Error stopping recording: {e}")
                 self.output.append(f"Error: Failed to stop recording: {e}")
+    
+    def _on_audio_worker_finished(self):
+        """Clean up the audio worker after it's done."""
+        if hasattr(self, 'audio_worker'):
+            self.audio_worker.deleteLater()
+            delattr(self, 'audio_worker')
     
     def on_audio_chunk(self, chunk):
         try:
@@ -415,7 +457,7 @@ class TranscriptionGUI(QMainWindow):
         except Exception as e:
             print(f"Error cleaning up audio: {e}")
         
-        # Clean up transcription worker
+        # Clean up transcription worker and manager
         if hasattr(self, 'transcription_worker'):
             try:
                 # Stop the transcription processing
@@ -428,7 +470,11 @@ class TranscriptionGUI(QMainWindow):
                     self.transcription_worker.terminate()  # Force stop if needed
             except Exception as e:
                 print(f"Error cleaning up transcription worker: {e}")
-        
+        if hasattr(self, 'transcription_manager'):
+            try:
+                self.transcription_manager.close()
+            except Exception as e:
+                print(f"Error closing transcription manager: {e}")
         event.accept()
     
     def _signal_handler(self, signum, frame):
@@ -437,6 +483,18 @@ class TranscriptionGUI(QMainWindow):
         self._shutdown = True
         self.close()
         QApplication.quit()
+
+    @property
+    def is_recording(self):
+        return getattr(self.audio_manager, 'recording', False)
+
+    @property
+    def transcription_text(self):
+        return self.output
+
+    @property
+    def settings(self):
+        return self.settings_manager.settings
 
 def run_gui():
     app = QApplication(sys.argv)
