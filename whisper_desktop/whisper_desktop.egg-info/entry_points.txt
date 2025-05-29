@@ -1,2 +1,0 @@
-[console_scripts]
-whisper-desktop = whisper_desktop.run:run_gui

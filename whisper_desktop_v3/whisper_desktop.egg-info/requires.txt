@@ -1,6 +1,0 @@
-PyQt6
-pyqtgraph
-numpy
-pyaudio
-openai-whisper
-pyautogui
