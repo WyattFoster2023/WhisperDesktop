@@ -39,4 +39,25 @@ def test_toggle_recording(mock_eventbus, mock_wave_open, mock_pyaudio):
     recorder.toggle_recording()
     assert recorder._recording is True
     recorder.toggle_recording()
-    assert recorder._recording is False 
+    assert recorder._recording is False
+
+@patch('src.recorder.recorder.pyaudio.PyAudio')
+@patch('src.recorder.recorder.wave.open')
+def test_eventbus_integration(mock_wave_open, mock_pyaudio):
+    from src.recorder.recorder import Recorder, RecordingMode
+    from src.event_bus.event_bus import EventBus, EventType
+    mock_stream = MagicMock()
+    mock_audio = MagicMock()
+    mock_audio.open.return_value = mock_stream
+    mock_pyaudio.return_value = mock_audio
+    mock_wave = MagicMock()
+    mock_wave_open.return_value = mock_wave
+    recorder = Recorder()
+    events = []
+    bus = recorder._event_bus
+    bus.subscribe(EventType.RECORDING_STARTED, lambda payload: events.append(('started', payload)))
+    bus.subscribe(EventType.RECORDING_STOPPED, lambda payload: events.append(('stopped', payload)))
+    recorder.start_recording(RecordingMode.TOGGLE)
+    recorder.stop_recording()
+    assert events[0][0] == 'started'
+    assert events[1][0] == 'stopped' 
