@@ -2,6 +2,7 @@ import os
 import sqlite3
 from typing import Optional
 from src.event_bus.event_bus import EventBus
+from src.utils.logger import Logger
 
 class StorageManager:
     """
@@ -27,7 +28,7 @@ class StorageManager:
                 """)
                 conn.commit()
         except sqlite3.Error as e:
-            raise RuntimeError(f"Failed to initialize database: {e}")
+            Logger().error(f"Failed to initialize database: {e}")
 
     def _get_connection(self):
         """
@@ -78,7 +79,8 @@ class StorageManager:
                 })
                 return transcription_id
         except Exception as e:
-            raise RuntimeError(f"Failed to save transcription: {e}")
+            Logger().error(f"Failed to save transcription: {e}")
+            return -1
 
     def get_transcription(self, transcription_id: int) -> Optional[dict]:
         """
@@ -111,7 +113,8 @@ class StorageManager:
                     "audio_path": row[4]
                 }
         except Exception as e:
-            raise RuntimeError(f"Failed to get transcription: {e}")
+            Logger().error(f"Failed to get transcription: {e}")
+            return None
 
     def get_recent_transcriptions(self, limit: int = 10) -> list:
         """
@@ -146,7 +149,8 @@ class StorageManager:
                     for row in rows
                 ]
         except Exception as e:
-            raise RuntimeError(f"Failed to get recent transcriptions: {e}")
+            Logger().error(f"Failed to get recent transcriptions: {e}")
+            return []
 
     def update_transcription(self, transcription_id: int, text: Optional[str] = None, segments_metadata: Optional[list] = None, audio_path: Optional[str] = None) -> bool:
         """

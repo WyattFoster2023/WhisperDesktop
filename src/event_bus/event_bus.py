@@ -17,6 +17,8 @@ class EventType(Enum):
     RECORDING_STOPPED = 2
     TRANSCRIPTION_REQUESTED = 3
     TRANSCRIPTION_COMPLETED = 4
+    CONFIG_CHANGED = 5
+    CONFIG_RESET = 6
     # Add more event types as needed
 
 class ResultQueue:

@@ -5,6 +5,7 @@ from src.clipboard.clipboard_controller import ClipboardController
 from src.transcriber.transcriber_worker import TranscriberWorker
 from PyQt5.QtWidgets import QApplication
 from src.ui.ui_controller import UIController
+from src.utils.logger import Logger
 
 class ApplicationController:
     def __init__(self):
@@ -46,19 +47,19 @@ class ApplicationController:
         try:
             self._recorder.start_recording()
         except Exception as e:
-            print(f"Error in start_recording: {e}")
+            Logger().error(f"Error in start_recording: {e}")
 
     def _on_stop_recording_requested(self, data):
         try:
             self._recorder.stop_recording()
         except Exception as e:
-            print(f"Error in stop_recording: {e}")
+            Logger().error(f"Error in stop_recording: {e}")
 
     def _on_toggle_recording_requested(self, data):
         try:
             self._recorder.toggle_recording()
         except Exception as e:
-            print(f"Error in toggle_recording: {e}")
+            Logger().error(f"Error in toggle_recording: {e}")
 
     def _check_result_queue(self):
         # Poll the result queue for new transcription results (non-blocking)
@@ -79,7 +80,7 @@ class ApplicationController:
                         try:
                             os.remove(audio_path)
                         except Exception as e:
-                            print(f"Error deleting audio file {audio_path}: {e}")
+                            Logger().error(f"Error deleting audio file {audio_path}: {e}")
                     # Publish transcription completed event
                     from src.event_bus.event_bus import EventType
                     self._event_bus.publish(EventType.TRANSCRIPTION_COMPLETED, {
@@ -88,7 +89,7 @@ class ApplicationController:
                         "segments": result.get("segments", [])
                     })
         except Exception as e:
-            print(f"Error processing result queue: {e}")
+            Logger().error(f"Error processing result queue: {e}")
 
     def run(self):
         # Show the UI and start the Qt event loop
@@ -96,7 +97,7 @@ class ApplicationController:
             self._ui_controller.show()
             return self._app.exec_()
         except Exception as e:
-            print(f"Error in application run loop: {e}")
+            Logger().error(f"Error in application run loop: {e}")
         finally:
             self.cleanup()
 
@@ -111,4 +112,4 @@ class ApplicationController:
                 self._recorder.cleanup()
             # Add additional cleanup for other modules as needed
         except Exception as e:
-            print(f"Error during cleanup: {e}") 
+            Logger().error(f"Error during cleanup: {e}") 

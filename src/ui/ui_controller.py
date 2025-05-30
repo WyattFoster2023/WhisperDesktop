@@ -3,6 +3,7 @@ from PyQt5.QtCore import Qt, QSize, QTimer
 from enum import Enum
 from src.event_bus.event_bus import EventBus, EventType
 from src.storage.storage_manager import StorageManager
+from src.utils.logger import Logger
 
 class UIStatus(Enum):
     IDLE = "Ready"
@@ -142,6 +143,7 @@ class UIController(QMainWindow):
         try:
             transcriptions = self._storage_manager.get_recent_transcriptions(limit=10)
         except Exception as e:
+            Logger().error(f"Failed to refresh history: {e}")
             transcriptions = []
         self.history_dropdown.clear()
         self._history_data = transcriptions
