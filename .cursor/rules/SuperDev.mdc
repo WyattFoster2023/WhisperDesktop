@@ -1,0 +1,80 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: 
+globs: 
+alwaysApply: true
+---
+---
+description: Defines the SuperDev Iterative Workflow for end-to-end task and subtask execution in Cursor. No context is needed to start this workflow; you will retrieve necessary info as part of the process. Begin work immediately on any specified tasks.
+globs: .cursor/rules/SuperDev.mdc
+alwaysApply: true
+---
+
+- **Purpose of This Rule**
+  - Implements an automated development loop called "SuperDev Mode"
+  - Handles **both tasks and their subtasks** by repeating steps as needed
+  - Ensures tasks are selected, executed, validated, documented, and closed out in a clear, auditable process
+  - Prevents context loss, duplication, and skipped steps
+
+---
+
+- **SuperDev Iterative Workflow (Tasks & Subtasks)**
+
+  ```plaintext
+  1. Run `tree src /F` to view the project structure.
+
+  2. Identify the **top-level task** to complete:
+     - If the user specified a task ID (e.g., "Use SuperDev to complete task 5"), run:
+       `task-master show <ID>`
+       to see its details (including any subtasks).
+     - If the user did not specify a task, use:
+       `task-master next`
+       to get the next pending task.
+
+  3. If the task has **subtasks** (e.g., 5.1, 5.2, etc.):
+     - Process each subtask **in ascending order** of ID (5.1, then 5.2, etc.).
+     - For **each subtask**, execute steps 3A through 9 below (treating the subtask as the “task” in question).
+     - After completing all subtasks, mark the top-level task as `done` if appropriate.
+
+  4. Read subtask details:
+      `task-master show <subtaskID>`
+
+  5. Mark the subtask **in-progress**:
+      `task-master set-status --id=<subtaskID> --status=in-progress`
+
+  6. View documentation tree (to ensure references are correct):
+      `tree docs /F`
+
+  7. Search for relevant context:
+      - Use grep or other internal tooling to locate key mentions, code references, or dependencies
+      - Example: `grep -r "Task ID: <id>" .` or `grep -r "<componentName>" src/`
+
+  8. **Complete the subtask**:
+      - Work from existing files and infrastructure
+      - Avoid duplicating components, constants, or utilities
+      - Follow established code and architectural patterns
+
+  9. **Run build** to verify:
+      - `npm run build`
+      - If build fails, fix issues and repeat until clean
+
+  10. **Document your work**:
+      - Add or update relevant files in `docs/`
+      - Include:
+          - What was added or changed
+          - Why it was done
+          - How to use it (if applicable)
+
+  11. Mark the subtask as **done**:
+      `task-master set-status --id=<subtaskID> --status=done`
+
+  12. **Check if more subtasks remain** or if there are new follow-up tasks:
+      - If **more subtasks** exist, repeat from Step 3A for each remaining subtask
+      - If **no more subtasks** remain for this top-level task, and the user’s request is fulfilled, check if more tasks are still pending
+      - If more tasks remain and the user wants them done, restart from Step 1
+
+      - Otherwise, **exit SuperDev Mode**

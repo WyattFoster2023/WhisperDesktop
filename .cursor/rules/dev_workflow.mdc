@@ -3,6 +3,7 @@ description:
 globs: 
 alwaysApply: true
 ---
+<<<<<<< HEAD
 # ==== NEW GOAL ====
 The golden, TASK 9 (all subtasks). 
 
@@ -12,6 +13,8 @@ Do not exit until all tasks before it are complete.
 # ===============
 
 
+=======
+>>>>>>> ffaafd49a28cbfa0188efc507eac474b7d36e74d
 
 # Task Master Development Workflow
 

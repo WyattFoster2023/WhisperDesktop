@@ -1,7 +1,13 @@
 ---
+<<<<<<< HEAD
 description: 
 globs: 
 alwaysApply: true
+=======
+description: Comprehensive reference for Taskmaster MCP tools and CLI commands.
+globs: 
+alwaysApply: false
+>>>>>>> ffaafd49a28cbfa0188efc507eac474b7d36e74d
 ---
 
 # Taskmaster Tool & Command Reference
