@@ -37,4 +37,19 @@ def test_error_handling():
     bus.subscribe(EventType.RECORDING_STOPPED, bad_callback)
     # Should not raise, error is logged
     bus.publish(EventType.RECORDING_STOPPED, None)
-    bus.unsubscribe(EventType.RECORDING_STOPPED, bad_callback) 
+    bus.unsubscribe(EventType.RECORDING_STOPPED, bad_callback)
+
+def test_integration_with_mock_subscribers():
+    bus = EventBus()
+    called = []
+    def mock_subscriber_1(payload):
+        called.append(('s1', payload))
+    def mock_subscriber_2(payload):
+        called.append(('s2', payload))
+    bus.subscribe(EventType.TRANSCRIPTION_COMPLETED, mock_subscriber_1)
+    bus.subscribe(EventType.TRANSCRIPTION_COMPLETED, mock_subscriber_2)
+    bus.publish(EventType.TRANSCRIPTION_COMPLETED, {'result': 'ok'})
+    assert ('s1', {'result': 'ok'}) in called
+    assert ('s2', {'result': 'ok'}) in called
+    bus.unsubscribe(EventType.TRANSCRIPTION_COMPLETED, mock_subscriber_1)
+    bus.unsubscribe(EventType.TRANSCRIPTION_COMPLETED, mock_subscriber_2) 
