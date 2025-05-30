@@ -71,3 +71,14 @@ class Recorder:
         self._event_bus.get_queue('transcription').put(self._file_path)
         self._event_bus.publish(EventType.RECORDING_STOPPED, self._file_path)
         return self._file_path 
+
+    def toggle_recording(self):
+        if self._recording:
+            return self.stop_recording()
+        else:
+            return self.start_recording(RecordingMode.TOGGLE)
+
+    def cleanup(self):
+        if self._recording:
+            self.stop_recording()
+        self._audio.terminate() 
