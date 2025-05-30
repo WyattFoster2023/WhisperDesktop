@@ -49,6 +49,7 @@ class TranscriberWorker(multiprocessing.Process):
                 if audio_path is None:
                     continue
                 logger.info(f"Transcribing file: {audio_path}")
+                self._event_bus.publish(EventType.TRANSCRIPTION_REQUESTED, audio_path)
                 segments, info = model.transcribe(
                     audio_path,
                     vad_filter=self.vad_filter,
@@ -73,6 +74,7 @@ class TranscriberWorker(multiprocessing.Process):
                 }
                 self._result_queue.put(result)
                 logger.info(f"Transcription complete for: {audio_path}")
+                self._event_bus.publish(EventType.TRANSCRIPTION_COMPLETED, result)
             except Exception as e:
                 logger.error(f"Error in transcriber worker: {e}")
 
