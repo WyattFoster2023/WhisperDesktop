@@ -4,11 +4,12 @@
 EventBus module for inter-module communication using the Singleton pattern.
 """
 
+import logging
 from enum import Enum
 from multiprocessing import Queue
 from typing import Callable, Dict, List, Any
 import threading
-import logging
+from whisperdesktop.utils.logger import Logger
 
 logger = logging.getLogger("event_bus")
 

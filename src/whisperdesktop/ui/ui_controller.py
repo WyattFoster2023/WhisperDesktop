@@ -1,9 +1,9 @@
 from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QDialog, QTextEdit, QApplication, QComboBox
 from PyQt5.QtCore import Qt, QSize, QTimer
 from enum import Enum
-from src.event_bus.event_bus import EventBus, EventType
-from src.storage.storage_manager import StorageManager
-from src.utils.logger import Logger
+from whisperdesktop.event_bus.event_bus import EventBus, EventType
+from whisperdesktop.storage.storage_manager import StorageManager
+from whisperdesktop.utils.logger import Logger
 
 class UIStatus(Enum):
     IDLE = "Ready"

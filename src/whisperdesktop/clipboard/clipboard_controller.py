@@ -1,6 +1,7 @@
-from src.event_bus.event_bus import EventBus, EventType
+from whisperdesktop.event_bus.event_bus import EventBus, EventType
 import pyperclip
 import pyautogui
+from whisperdesktop.utils.logger import Logger
 
 class ClipboardController:
     """

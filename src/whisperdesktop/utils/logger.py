@@ -17,7 +17,7 @@ except ImportError:
 
 # EventBus import (assume exists)
 try:
-    from src.event_bus.event_bus import EventBus, EventType
+    from whisperdesktop.event_bus.event_bus import EventBus, EventType
 except ImportError:
     EventBus = None
     EventType = None
@@ -37,7 +37,6 @@ class ErrorReporter:
         self._event_bus = event_bus
         self._errors = []  # List of dicts: {timestamp, message, severity, traceback}
         if self._event_bus:
-            from src.event_bus.event_bus import EventType
             self._event_bus.subscribe(EventType.ERROR, self._on_error_event)
 
     def _on_error_event(self, data):
@@ -64,61 +63,31 @@ class Logger:
     _lock = threading.Lock()
     _initialized = False
 
-    def __new__(cls):
-        with cls._lock:
-            if cls._instance is None:
-                cls._instance = super(Logger, cls).__new__(cls)
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(Logger, cls).__new__(cls)
+            cls._instance._initialize_logger()
         return cls._instance
 
-    def __init__(self):
-        if Logger._initialized:
-            return
-        Logger._initialized = True
-        self._event_bus = EventBus() if EventBus else None
-        os.makedirs('logs', exist_ok=True)
-        os.makedirs('logs/archive', exist_ok=True)
-        self._logger = logging.getLogger('transcription_tool')
-        self._logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
-        # Prevent duplicate handlers
-        if not self._logger.handlers:
-            console_handler = logging.StreamHandler()
-            console_handler.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
-            file_handler = RotatingFileHandler(
-                'logs/app.log', maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUP_COUNT
-            )
-            file_handler.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
-            console_formatter = logging.Formatter('%(levelname)s: %(message)s')
-            file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            console_handler.setFormatter(console_formatter)
-            file_handler.setFormatter(file_formatter)
-            self._logger.addHandler(console_handler)
-            self._logger.addHandler(file_handler)
-        # Archive and cleanup old logs on startup
-        self.archive_old_logs()
-        self.cleanup_old_logs()
-        # Instantiate ErrorReporter to listen for error events
-        self._error_reporter = ErrorReporter(self._event_bus)
+    def _initialize_logger(self):
+        self.logger = logging.getLogger("whisperdesktop")
+        self.logger.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler = logging.StreamHandler()
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+
+    def info(self, message):
+        self.logger.info(message)
+
+    def error(self, message):
+        self.logger.error(message)
 
     def debug(self, message):
-        self._logger.debug(message)
-    def info(self, message):
-        self._logger.info(message)
+        self.logger.debug(message)
+
     def warning(self, message):
-        self._logger.warning(message)
-    def error(self, message, exc_info=None):
-        self._logger.error(message, exc_info=exc_info)
-        if self._event_bus and EventType:
-            self._event_bus.publish(EventType.ERROR, {"message": message})
-    def critical(self, message, exc_info=None):
-        self._logger.critical(message, exc_info=exc_info)
-        if self._event_bus and EventType:
-            self._event_bus.publish(EventType.ERROR, {"message": message, "critical": True})
-    def exception(self, message):
-        self._logger.exception(message)
-        exc_type, exc_value, exc_traceback = sys.exc_info()
-        tb_str = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-        if self._event_bus and EventType:
-            self._event_bus.publish(EventType.ERROR, {"message": message, "traceback": tb_str})
+        self.logger.warning(message)
 
     def archive_old_logs(self):
         """
@@ -132,7 +101,7 @@ class Logger:
                 try:
                     shutil.move(rotated_log, archive_name)
                 except Exception as e:
-                    self._logger.error(f"Failed to archive log {rotated_log}: {e}")
+                    self.logger.error(f"Failed to archive log {rotated_log}: {e}")
 
     def cleanup_old_logs(self):
         """
@@ -146,13 +115,13 @@ class Logger:
                 if (now - mtime).days > LOG_RETENTION_DAYS:
                     os.remove(log_file)
             except Exception as e:
-                self._logger.error(f"Failed to cleanup log {log_file}: {e}")
+                self.logger.error(f"Failed to cleanup log {log_file}: {e}")
 
 # Global exception handler
 def global_exception_handler(exctype, value, tb):
     logger = Logger()
     tb_str = ''.join(traceback.format_exception(exctype, value, tb))
-    logger.critical(f"Uncaught exception: {value}", exc_info=(exctype, value, tb))
+    logger.logger.critical(f"Uncaught exception: {value}", exc_info=(exctype, value, tb))
     # Create crash report
     try:
         os.makedirs('crash_reports', exist_ok=True)
@@ -163,7 +132,7 @@ def global_exception_handler(exctype, value, tb):
             f.write(f"Exception: {exctype.__name__}: {value}\n\n")
             f.write(f"Traceback:\n{tb_str}\n")
     except Exception as e:
-        logger.error(f"Failed to create crash report: {e}")
+        logger.logger.error(f"Failed to create crash report: {e}")
     # Show error dialog if possible
     try:
         if PYQT5_AVAILABLE and QApplication.instance():
@@ -172,7 +141,7 @@ def global_exception_handler(exctype, value, tb):
                 f"Error: {value}\n\n"
                 f"A crash report has been saved to the crash_reports directory.")
     except Exception as e:
-        logger.error(f"Failed to show error dialog: {e}")
+        logger.logger.error(f"Failed to show error dialog: {e}")
 
 # Register the global exception handler
 sys.excepthook = global_exception_handler 

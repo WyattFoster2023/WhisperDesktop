@@ -5,11 +5,11 @@ TranscriberWorker module for background audio transcription using Faster-Whisper
 
 import multiprocessing
 from typing import Optional, Dict, Any
-from src.event_bus.event_bus import EventBus, EventType
-import logging
+from whisperdesktop.event_bus.event_bus import EventBus, EventType
+from whisperdesktop.utils.logger import Logger
 from faster_whisper import WhisperModel
 
-logger = logging.getLogger("transcriber_worker")
+logger = Logger("transcriber_worker")
 
 class TranscriberWorker(multiprocessing.Process):
     """Background worker for audio transcription."""

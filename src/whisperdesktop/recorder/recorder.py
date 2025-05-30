@@ -9,8 +9,8 @@ import wave
 import os
 from datetime import datetime
 from typing import Optional
-from src.event_bus.event_bus import EventBus, EventType
-from src.utils.logger import Logger
+from whisperdesktop.event_bus.event_bus import EventBus, EventType
+from whisperdesktop.utils.logger import Logger
 
 logger = Logger()
 

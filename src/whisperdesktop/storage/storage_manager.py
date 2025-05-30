@@ -1,8 +1,9 @@
 import os
 import sqlite3
 from typing import Optional
-from src.event_bus.event_bus import EventBus
-from src.utils.logger import Logger
+from whisperdesktop.event_bus.event_bus import EventBus
+from whisperdesktop.utils.logger import Logger
+from whisperdesktop.event_bus.event_bus import EventType
 
 class StorageManager:
     """
@@ -71,7 +72,6 @@ class StorageManager:
                 transcription_id = cursor.lastrowid
                 conn.commit()
                 # Publish event
-                from src.event_bus.event_bus import EventType
                 self._event_bus.publish(EventType.TRANSCRIPTION_COMPLETED, {
                     "id": transcription_id,
                     "timestamp": timestamp,
@@ -189,7 +189,6 @@ class StorageManager:
                     return False
                 conn.commit()
                 # Publish event (no specific update event, use COMPLETED)
-                from src.event_bus.event_bus import EventType
                 self._event_bus.publish(EventType.TRANSCRIPTION_COMPLETED, {"id": transcription_id})
                 return True
         except Exception as e:
@@ -213,7 +212,6 @@ class StorageManager:
                     return False
                 conn.commit()
                 # Publish event (no specific delete event, use COMPLETED)
-                from src.event_bus.event_bus import EventType
                 self._event_bus.publish(EventType.TRANSCRIPTION_COMPLETED, {"id": transcription_id})
                 return True
         except Exception as e:

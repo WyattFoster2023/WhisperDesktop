@@ -1,11 +1,11 @@
-from src.event_bus.event_bus import EventBus
-from src.recorder.recorder import Recorder
-from src.storage.storage_manager import StorageManager
-from src.clipboard.clipboard_controller import ClipboardController
-from src.transcriber.transcriber_worker import TranscriberWorker
+from whisperdesktop.event_bus.event_bus import EventBus
+from whisperdesktop.recorder.recorder import Recorder
+from whisperdesktop.storage.storage_manager import StorageManager
+from whisperdesktop.clipboard.clipboard_controller import ClipboardController
+from whisperdesktop.transcriber.transcriber_worker import TranscriberWorker
 from PyQt5.QtWidgets import QApplication
-from src.ui.ui_controller import UIController
-from src.utils.logger import Logger
+from whisperdesktop.ui.ui_controller import UIController
+from whisperdesktop.utils.logger import Logger
 
 class ApplicationController:
     def __init__(self):
@@ -38,7 +38,7 @@ class ApplicationController:
 
     def _setup_event_handlers(self):
         # Subscribe to core recording events
-        from src.event_bus.event_bus import EventType
+        from whisperdesktop.event_bus.event_bus import EventType
         self._event_bus.subscribe(EventType.START_RECORDING_REQUESTED, self._on_start_recording_requested)
         self._event_bus.subscribe(EventType.STOP_RECORDING_REQUESTED, self._on_stop_recording_requested)
         self._event_bus.subscribe(EventType.TOGGLE_RECORDING_REQUESTED, self._on_toggle_recording_requested)
@@ -82,7 +82,7 @@ class ApplicationController:
                         except Exception as e:
                             Logger().error(f"Error deleting audio file {audio_path}: {e}")
                     # Publish transcription completed event
-                    from src.event_bus.event_bus import EventType
+                    from whisperdesktop.event_bus.event_bus import EventType
                     self._event_bus.publish(EventType.TRANSCRIPTION_COMPLETED, {
                         "id": transcription_id,
                         "text": result.get("text", ""),

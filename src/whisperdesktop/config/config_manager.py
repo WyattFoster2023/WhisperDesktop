@@ -1,7 +1,8 @@
 import os
 from typing import Any, Dict
-from src.event_bus.event_bus import EventBus, EventType
+from whisperdesktop.event_bus.event_bus import EventBus, EventType
 import json
+from whisperdesktop.utils.logger import Logger
 
 class ConfigurationManager:
     _instance = None

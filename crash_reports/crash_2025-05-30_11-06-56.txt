@@ -1,0 +1,17 @@
+Crash Report - 2025-05-30_11-06-56
+
+Exception: NameError: name 'logging' is not defined
+
+Traceback:
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Projects\WhisperDesktop\src\whisperdesktop\main.py", line 3, in <module>
+    from whisperdesktop.application_controller import ApplicationController
+  File "C:\Projects\WhisperDesktop\src\whisperdesktop\application_controller.py", line 1, in <module>
+    from whisperdesktop.event_bus.event_bus import EventBus
+  File "C:\Projects\WhisperDesktop\src\whisperdesktop\event_bus\event_bus.py", line 13, in <module>
+    logger = logging.getLogger("event_bus")
+             ^^^^^^^
+NameError: name 'logging' is not defined. Did you forget to import 'logging'?
+
