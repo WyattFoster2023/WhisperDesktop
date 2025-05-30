@@ -13,8 +13,9 @@ logger = logging.getLogger("transcriber_worker")
 
 class TranscriberWorker(multiprocessing.Process):
     """Background worker for audio transcription."""
-    def __init__(self, model_size="base", device="cpu", compute_type="int8", 
-                 vad_filter=True, vad_threshold=2.0, use_batched=False, batch_size=8):
+    def __init__(self, model_size="tiny", device="cpu", compute_type="int8", 
+                 vad_filter=True, vad_threshold=2.0, use_batched=False, batch_size=8, max_loops=None,
+                 event_bus=None, transcription_queue=None, result_queue=None):
         super().__init__()
         self.model_size = model_size
         self.device = device
@@ -25,14 +26,18 @@ class TranscriberWorker(multiprocessing.Process):
         self.batch_size = batch_size
         self.daemon = True
         self._stop_event = multiprocessing.Event()
-        self._event_bus = EventBus()
-        self._transcription_queue = self._event_bus.get_queue('transcription')
-        self._result_queue = self._event_bus.get_queue('result')
+        self._max_loops = max_loops
+        self._event_bus = event_bus
+        self._transcription_queue = transcription_queue
+        self._result_queue = result_queue
 
     def run(self):
+        event_bus = self._event_bus if self._event_bus is not None else EventBus()
+        transcription_queue = self._transcription_queue if self._transcription_queue is not None else event_bus.get_queue('transcription')
+        result_queue = self._result_queue if self._result_queue is not None else event_bus.get_queue('result')
         try:
             model = WhisperModel(
-                model_size=self.model_size,
+                self.model_size,
                 device=self.device,
                 compute_type=self.compute_type
             )
@@ -43,13 +48,17 @@ class TranscriberWorker(multiprocessing.Process):
         except Exception as e:
             logger.error(f"Failed to initialize WhisperModel: {e}")
             return
+        loop_count = 0
         while not self._stop_event.is_set():
+            if self._max_loops is not None and loop_count >= self._max_loops:
+                break
+            loop_count += 1
             try:
-                audio_path = self._transcription_queue.get(timeout=1.0)
+                audio_path = transcription_queue.get(timeout=1.0)
                 if audio_path is None:
                     continue
                 logger.info(f"Transcribing file: {audio_path}")
-                self._event_bus.publish(EventType.TRANSCRIPTION_REQUESTED, audio_path)
+                event_bus.publish(EventType.TRANSCRIPTION_REQUESTED, audio_path)
                 segments, info = model.transcribe(
                     audio_path,
                     vad_filter=self.vad_filter,
@@ -72,11 +81,27 @@ class TranscriberWorker(multiprocessing.Process):
                     "language": info.language,
                     "language_probability": info.language_probability
                 }
-                self._result_queue.put(result)
+                result_queue.put(result)
                 logger.info(f"Transcription complete for: {audio_path}")
-                self._event_bus.publish(EventType.TRANSCRIPTION_COMPLETED, result)
+                event_bus.publish(EventType.TRANSCRIPTION_COMPLETED, result)
             except Exception as e:
                 logger.error(f"Error in transcriber worker: {e}")
 
     def stop(self):
-        self._stop_event.set() 
+        self._stop_event.set()
+
+    def shutdown(self, timeout=5):
+        """Signal the worker to stop and join the process."""
+        self._stop_event.set()
+        if self.is_alive():
+            self.join(timeout=timeout)
+            if self.is_alive():
+                # If still alive, terminate (force kill)
+                self.terminate()
+                self.join(timeout=timeout)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.shutdown() 
