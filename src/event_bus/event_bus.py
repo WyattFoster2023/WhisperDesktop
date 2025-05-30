@@ -16,6 +16,10 @@ class EventType(Enum):
     TRANSCRIPTION_COMPLETED = 4
     # Add more event types as needed
 
+class ResultQueue(Queue):
+    """Specialized queue for handling transcription results."""
+    pass
+
 class EventBus:
     _instance = None
     _lock = threading.Lock()
@@ -50,5 +54,15 @@ class EventBus:
         with self._event_lock:
             if callback in self._subscribers[event_type]:
                 self._subscribers[event_type].remove(callback)
+
+    def add_queue(self, name: str):
+        with self._event_lock:
+            if name not in self._queues:
+                self._queues[name] = Queue()
+
+    def add_result_queue(self, name: str):
+        with self._event_lock:
+            if name not in self._queues:
+                self._queues[name] = ResultQueue()
 
 # Implementation will follow in subsequent subtasks. 
