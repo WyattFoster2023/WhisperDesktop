@@ -8,6 +8,9 @@ from enum import Enum
 from multiprocessing import Queue
 from typing import Callable, Dict, List, Any
 import threading
+import logging
+
+logger = logging.getLogger("event_bus")
 
 class EventType(Enum):
     RECORDING_STARTED = 1
@@ -43,17 +46,29 @@ class EventBus:
 
     def publish(self, event_type: EventType, payload: Any = None):
         with self._event_lock:
-            for callback in self._subscribers[event_type]:
-                callback(payload)
+            try:
+                for callback in self._subscribers[event_type]:
+                    callback(payload)
+                logger.info(f"Published event: {event_type} with payload: {payload}")
+            except Exception as e:
+                logger.error(f"Error publishing event {event_type}: {e}")
 
     def subscribe(self, event_type: EventType, callback: Callable[[Any], None]):
         with self._event_lock:
-            self._subscribers[event_type].append(callback)
+            try:
+                self._subscribers[event_type].append(callback)
+                logger.info(f"Subscribed callback to event: {event_type}")
+            except Exception as e:
+                logger.error(f"Error subscribing to event {event_type}: {e}")
 
     def unsubscribe(self, event_type: EventType, callback: Callable[[Any], None]):
         with self._event_lock:
-            if callback in self._subscribers[event_type]:
-                self._subscribers[event_type].remove(callback)
+            try:
+                if callback in self._subscribers[event_type]:
+                    self._subscribers[event_type].remove(callback)
+                    logger.info(f"Unsubscribed callback from event: {event_type}")
+            except Exception as e:
+                logger.error(f"Error unsubscribing from event {event_type}: {e}")
 
     def add_queue(self, name: str):
         with self._event_lock:
