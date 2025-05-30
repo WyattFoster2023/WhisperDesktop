@@ -1,4 +1,3 @@
-
 # Product Requirements Document (PRD): Windows Local Transcription Tool
 
 > **Edit Notice:**  
@@ -57,14 +56,14 @@ This is also a github project, use commits to save task-master task progress.
 ### 2.4 User Interface  
 - **Overlay:** Small always‑on‑top window with:  
   - Record/Stop buttons  
-  - Status indicator: “Recording…”, “Transcribing…”, “Saved ✓”  
+  - Status indicator: "Recording…", "Transcribing…", "Saved ✓"  
   - Spinner or progress bar during transcription  
 - **History Dropdown:**  
   - Shows recent items: timestamp + first 15 words  
-  - Selecting an item reveals full text + “Copy” button  
+  - Selecting an item reveals full text + "Copy" button  
 - **Clipboard Integration:**  
   - Auto‑copy each new transcript  
-  - Optional “Paste” via simulated Ctrl+V in active window 
+  - Optional "Paste" via simulated Ctrl+V in active window 
 
 ### 2.5 External resources
 
@@ -99,7 +98,7 @@ This is also a github project, use commits to save task-master task progress.
                                            │
                                            ▼
 [ Main/UI Thread ] — save_to_db → delete audio → copy_to_clipboard → update UI
-````
+```
 
 ### 4.1 Modules
 
@@ -128,15 +127,15 @@ This is also a github project, use commits to save task-master task progress.
 
 * **Functionality:**
 
-  * ≥ 95% uptime during recording/transcription
+  * ≥ 95% uptime during recording/transcription
   * No data loss on forced app termination
 * **Usability:**
 
-  * Transcription results visible within 1–2 s of job completion
+  * Transcription results visible within 1–2 s of job completion
   * History browsing & copy/paste intuitive
 * **Performance:**
 
-  * Real‑time (segment) throughput ≥ 1× audio length on modern hardware
+  * Real‑time (segment) throughput ≥ 1× audio length on modern hardware
 
 ---
 
@@ -152,3 +151,22 @@ This is also a github project, use commits to save task-master task progress.
 > Summary: <br>
 > * Added initial PRD
 > * Encouraged improvments, but changes must be maintained here.
+
+## Development Environment
+
+All development and testing for this project must be performed using the project's Python virtual environment (venv).
+
+- To activate the venv on Windows:
+  ```
+  venv\Scripts\activate
+  ```
+- To install dependencies:
+  ```
+  pip install -r requirements.txt
+  ```
+- To run tests:
+  ```
+  venv\Scripts\python -m pytest
+  ```
+
+This ensures consistent dependencies and environment for all contributors.
