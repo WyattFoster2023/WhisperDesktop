@@ -19,9 +19,16 @@ class EventType(Enum):
     TRANSCRIPTION_COMPLETED = 4
     # Add more event types as needed
 
-class ResultQueue(Queue):
-    """Specialized queue for handling transcription results."""
-    pass
+class ResultQueue:
+    """Specialized wrapper for handling transcription results using multiprocessing.Queue."""
+    def __init__(self):
+        self._queue = Queue()
+    def put(self, item):
+        self._queue.put(item)
+    def get(self):
+        return self._queue.get()
+    def empty(self):
+        return self._queue.empty()
 
 class EventBus:
     _instance = None
@@ -42,7 +49,10 @@ class EventBus:
         self._event_lock = threading.Lock()
 
     def get_queue(self, name: str) -> Queue:
-        return self._queues.get(name)
+        q = self._queues.get(name)
+        if isinstance(q, ResultQueue):
+            return q._queue
+        return q
 
     def publish(self, event_type: EventType, payload: Any = None):
         with self._event_lock:
